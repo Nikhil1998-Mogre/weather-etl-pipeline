@@ -33,7 +33,7 @@ jobs:
           gsutil cp spark_job/weather_data_processing.py gs://weather-data-gds-my/script/
 
       # Sync Airflow DAG Composer
-      - name: Upload Airflow DAG (in Dag Folders)
+      - name: Upload Airflow DAG (in Dag Folders create env)
         run: |
           gcloud composer environments storage dags import \
             --environment weather-dev \
