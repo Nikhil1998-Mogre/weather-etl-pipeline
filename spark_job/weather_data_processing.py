@@ -8,7 +8,7 @@ def main():
     project      = "project-ad501b9d-ed36-4c9f-91c"
     dataset      = "forecast"
     table        = "weather_data"
-    temp_bucket  = "bq-temp-gds"
+    temp_bucket  = "bq-temp-gds-nikhil"
     bucket       = "weather-data-gds-my"
     today        = datetime.date.today().strftime("%Y-%m-%d")
     input_path   = f"gs://{bucket}/weather/{today}/forecast.csv"
