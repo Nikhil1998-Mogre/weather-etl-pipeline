@@ -49,7 +49,7 @@ with DAG(
             "requests==2.31.0",
         ],
         system_site_packages=True,   # <-- avoids the numpy ABI mismatch
-        op_kwargs={"api_key": Variable.get("openweather_api_key")},
+        op_kwargs={"api_key": Variable.get("openweather_api_key")}, # addes varibale in airlfow UI with key "openweather_api_key" and value as the API key from OpenWeather
     )
 
     # -------------------------------------------------------------------
