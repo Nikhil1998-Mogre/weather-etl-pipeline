@@ -1,38 +1,147 @@
+################################################################################
+# WEATHER DATA ETL PIPELINE - CONTINUOUS INTEGRATION & DEPLOYMENT (CI/CD)
+################################################################################
+# 
+# PURPOSE:
+#   This GitHub Actions workflow automates the deployment of code changes to
+#   Google Cloud Platform (GCP). When code is pushed to the main branch,
+#   this workflow automatically:
+#   1. Uploads Spark job script to Google Cloud Storage (GCS)
+#   2. Deploys Airflow DAGs to Google Cloud Composer (managed Airflow)
+#
+# TRIGGER:
+#   - Runs on: Push to 'main' branch only
+#   - Prevents accidental deployments from feature/dev branches
+#
+# WORKFLOW JOBS:
+#   1. deploy-codebase: Handles authentication, uploads, and deployment
+#
+# REQUIRED SECRETS (Must be configured in GitHub Settings → Secrets):
+#   - GCP_SA_KEY: GCP Service Account key JSON (for authentication)
+#   - GCP_PROJECT_ID: Your GCP project ID (used to identify resources)
+#
+################################################################################
+
 name: Weather Data CICD
 
+# ================================================================================
+# TRIGGER CONFIGURATION - When does this workflow run?
+# ================================================================================
 on:
   push:
     branches:
-      - main
+      - main  # Only run when code is pushed to 'main' branch
+              # Prevents accidental deployments from experimental branches
 
+# ================================================================================
+# JOBS - Define the work to be done
+# ================================================================================
 jobs:
   deploy-codebase:
+    # Condition: Only run this job if pushed to main branch
+    # Prevents duplicate runs and unwanted deployments
     if: github.ref == 'refs/heads/main'
+    
+    # Runner: GitHub-hosted Ubuntu Linux machine
+    # Provides OS environment where all steps execute
     runs-on: ubuntu-latest
 
     steps:
-      # Checkout the repository
+      # ========================================================================
+      # STEP 1: CHECKOUT REPOSITORY
+      # ========================================================================
+      # Clone the repository code to the runner machine
+      # Allows workflow to access all files (DAGs, Spark jobs, config)
+      # @v3 means use version 3 of this action (stable, recommended)
       - name: Checkout Code
         uses: actions/checkout@v3
 
-      # Authenticate to GCP Account
+      # ========================================================================
+      # STEP 2: AUTHENTICATE TO GOOGLE CLOUD PLATFORM (GCP)
+      # ========================================================================
+      # Use the GCP Service Account credentials to authenticate
+      # Service Account: GCP identity that workflow uses to access resources
+      # 
+      # Security Notes:
+      # - Credentials stored as GitHub Secret (not visible in logs)
+      # - Secret ${{ secrets.GCP_SA_KEY }} retrieved at runtime only
+      # - No credentials ever hardcoded or committed to repository
+      #
+      # What this enables:
+      # - Access to GCS buckets (read/write)
+      # - Access to Cloud Composer (Airflow) environments
+      # - Access to deploy resources securely
       - name: Authenticate to GCP
         uses: google-github-actions/auth@v1
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          credentials_json: ${{ secrets.GCP_SA_KEY }}  # GCP Service Account credentials from GitHub Secrets
 
-      # Setup Google Cloud SDK
+      # ========================================================================
+      # STEP 3: SETUP GOOGLE CLOUD SDK
+      # ========================================================================
+      # Install and configure the Google Cloud command-line tools (gcloud)
+      # Enables use of 'gcloud' and 'gsutil' commands in subsequent steps
+      #
+      # What SDK provides:
+      # - gsutil: Google Cloud Storage utility (upload/download files)
+      # - gcloud: General GCP command-line interface (manage resources)
+      # - composer: Manage Airflow environments
+      #
+      # project_id: Set default GCP project to use for all commands
       - name: Setup Google Cloud SDK
         uses: google-github-actions/setup-gcloud@v1
         with:
-          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          project_id: ${{ secrets.GCP_PROJECT_ID }}  # GCP project ID from GitHub Secrets
 
-      # Sync Spark job to GCS
+      # ========================================================================
+      # STEP 4: UPLOAD SPARK JOB TO GOOGLE CLOUD STORAGE (GCS)
+      # ========================================================================
+      # Copy the Spark Python script from GitHub to GCS
+      # Dataproc job will read this script from GCS when it executes
+      #
+      # Why this step:
+      # - Spark job code must be accessible from GCP resources
+      # - GCS is the standard way to store scripts for cloud jobs
+      # - Enables Airflow DAG to reference the script by URL
+      #
+      # Command breakdown:
+      # - gsutil cp: Copy file from local to cloud
+      # - Source: spark_job/weather_data_processing.py (from GitHub repo)
+      # - Destination: gs://weather-data-gds-my/script/ (GCS bucket path)
+      #
+      # Result:
+      # - File available at: gs://weather-data-gds-my/script/weather_data_processing.py
+      # - Dataproc can now read and execute this script
       - name: Upload Spark Job to GCS
         run: |
           gsutil cp spark_job/weather_data_processing.py gs://weather-data-gds-my/script/
 
-      # Sync Airflow DAG Composer
+      # ========================================================================
+      # STEP 5: UPLOAD AIRFLOW DAG TO CLOUD COMPOSER
+      # ========================================================================
+      # Deploy Airflow DAG files to Google Cloud Composer environment
+      # Cloud Composer: Google's managed version of Apache Airflow
+      #
+      # What happens:
+      # 1. Uploads all DAG files from weather_airflow_dags folder
+      # 2. Composer automatically detects new/updated DAGs
+      # 3. DAGs become available in Airflow UI immediately
+      # 4. Can trigger DAGs manually or via schedule
+      #
+      # Command breakdown:
+      # - gcloud composer environments storage dags import: Deploy DAGs
+      # - --environment weather-dev: Target Airflow environment name
+      # - --location us-central1: GCP region where Composer runs
+      # - --source weather_airflow_dags: Local folder containing DAG files
+      #
+      # Deploy order in this folder:
+      # - extract_data_dag.py: Fetch weather data from OpenWeather API
+      # - transform_data_dag.py: Process data with Spark, load to BigQuery
+      #
+      # After deployment:
+      # - DAGs visible in Cloud Composer's Airflow UI
+      # - Can view/edit DAG structure and logs
+      # - Can trigger manual runs via UI or API
       - name: Upload Airflow DAG (in Dag Folders create env)
         run: |
           gcloud composer environments storage dags import \
