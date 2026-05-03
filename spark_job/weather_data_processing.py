@@ -2,8 +2,7 @@
 
 import os, datetime
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, from_unixtime, to_timestamp
-
+from pyspark.sql.functions import col, from_unixtime, to_timestamp, regexp_extract
 def main():
     # —────────────── CONFIG ─────────────────────────────────────────
     project      = "project-ad501b9d-ed36-4c9f-91c"
@@ -36,10 +35,11 @@ def main():
         df
         .withColumn("dt", from_unixtime(col("dt")).cast("timestamp"))
         .withColumn("dt_txt", to_timestamp(col("dt_txt"), "yyyy-MM-dd HH:mm:ss"))
+        .withColumn("weather_main", regexp_extract(col("weather"), r"'main':\s*'([^']+)'", 1))
         .select(
             col("dt").alias("dt"),
             col("dt_txt").alias("forecast_time"),
-            col("weather").alias("weather"),
+            col("weather_main").alias("weather"),
             col("visibility").cast("int").alias("visibility"),
             col("pop").cast("double").alias("pop"),
             col("`main.temp`").cast("double").alias("temp"),
